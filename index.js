@@ -10,14 +10,19 @@ client.once('ready', () => {
 // track progress of guilds currently being cleaned up
 let cleanupInProgress = [];
 
-function removeChannels(message, guildid, matchfn) {
-  if (cleanupInProgress.includes(guildid)) {
+async function removeChannels(message, guild, matchfn) {
+  let executor = await guild.members.fetch(message.author);
+  if (!executor.hasPermission("MANAGE_CHANNELS")) {
+    message.reply("You don't have the required permission (MANAGE_CHANNELS)");
+    return;
+
+  }
+  if (cleanupInProgress.includes(guild.id)) {
     message.reply("Sorry, I'm already cleaning this guild.");
     return;
   }
-  cleanupInProgress.push(guildid)
+  cleanupInProgress.push(guild.id)
   let count = 0;
-  let guild = client.guilds.resolve(guildid);
   //message.reply("Starting deleting");
   guild.channels.cache.forEach((id, c) => {
     let channel = guild.channels.resolve(id);
@@ -28,9 +33,10 @@ function removeChannels(message, guildid, matchfn) {
     count++;
   });
   message.reply(`Deleted ${count} channels`)
+  cleanupInProgress = cleanupInProgress.filter(x => x != guild.id)
 }
 
-function advancedCmdExec(message) {
+async function advancedCmdExec(message) {
   if (false) {//!message.guild) {
     message.reply("Sorry, I don't work in DMs yet. But the owner has an idea on how to!");
     return;
@@ -38,6 +44,7 @@ function advancedCmdExec(message) {
   let params = message.content.split(' ');
   let cmd = message.guild ? params[1] : params[2];
   let guildid = message.guild ? message.guild.id : params[1];
+  let guild = message.guild ? message.guild : await client.guilds.fetch(params[1]);
   if (cmd == 'help') {
     message.reply(`
 Available commands:
@@ -58,22 +65,22 @@ You can get the server ID by enabling User Settings -> (under App Settings) Adva
   else if (cmd == 'matchexactname') {
     let matchname = params.slice(message.guild? 2 : 3).join(' ');
     message.reply(`Will delete channels that have the name \`${matchname}\``)
-    removeChannels(message, guildid, x => x.name == matchname);    
+    removeChannels(message, guild, x => x.name == matchname);    
   } else if (cmd == 'matchglob') {
     let glob = params.slice(message.guild? 2 : 3).join(' ');
     let re = GlobToRegex(glob);
     message.reply(`Will delete channels that match glob \`${glob}\``)
     console.log(re)
-    removeChannels(message, guildid, x => re.test(x.name));
+    removeChannels(message, guild, x => re.test(x.name));
   } else {
     message.reply("This command does not exist, or is not implemented yet.");
   }
 }
 
-client.on('message', message => {
+client.on('message', async message => {
   try {
-    if (message.content == "!raidclean!") {
-      removeChannels(message, x => x.name == "hacked")
+    if (message.content.startsWith("!raidclean!")) {
+      removeChannels(message, message.guild ? message.guild : await client.guilds.fetch(message.content.split(' ')[1]), x => x.name == "hacked")
     } else if (message.content.startsWith("!raidclean ")) {
       advancedCmdExec(message);
     }
